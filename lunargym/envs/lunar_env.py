@@ -1,5 +1,5 @@
 import gym
-from gym.spaces import multi_discrete
+from gym.spaces import discrete
 from gym.spaces import space
 import random
 import math
@@ -13,7 +13,8 @@ class lunarEnv(gym.Env):
     spec = None
 
     def __init__(self):
-        self.action_space = multi_discrete.MultiDiscrete([3,2])
+        self.action_set = [(-1, 0), (-1, 1), (0, 0), (0, 1), (1, 0), (1, 1)]
+        self.action_space = discrete.Discrete(6)
         self.observation_space = space.Space(shape=(318,), dtype=np.float32)
         self.map = []
 
@@ -99,7 +100,8 @@ class lunarEnv(gym.Env):
         if self.fuel == 0:
             self.done == True
 
-    def step(self, action):
+    def step(self, action_index):
+        action = self.action_set[action_index]
         dtheta = action[0]
         thrust = action[1]
         self.check()
@@ -123,7 +125,7 @@ class lunarEnv(gym.Env):
 
         self.x += self.velX
         self.y += self.velY
-        return [self.observation_space, self.reward, self.done, self.info]
+        return [self.get_observations(), self.reward, self.done, self.info]
 
     def getLanderBorders(self):
         borders = []
@@ -201,7 +203,7 @@ class lunarEnv(gym.Env):
         for i in range(0, self.map_width + 1, self.piece_width):
             xo = i
             x = i + self.piece_width
-            yo = self.map_height if len(self.map) == 0 else self.map[((i/self.piece_width) - 1)].y
+            yo = self.map_height if len(self.map) == 0 else self.map[((i / self.piece_width) - 1)].y
             y = min((yo + random.uniform(0, 100) - 55), self.map_height)
             if random.randint(0, 100) > 0.75:
                 y = yo
