@@ -39,8 +39,8 @@ class lunarEnv(gym.Env):
         self.y = self.map_height / 2
 
         # Constants
-        self.thrust = 0.005
-        self.gravity = -0.00162
+        self.thrust = 0.05
+        self.gravity = -0.0162
         self.viewer = None
         self.generateNewMap()
         if self.getPieceUnderLander().y > self.y or self.getPieceUnderLander().yo > self.y:
@@ -106,9 +106,9 @@ class lunarEnv(gym.Env):
                 self.reward += addedScore
                 self.respawn()
             else:
-                self.reward -= 250
+                self.reward -= min(250,self.reward)
                 self.reset()
-            print(self.reward)
+            # print(self.reward)
 
         if self.fuel <= 0 or self.y < 0 or self.y > self.map_height:
             self.done = True
@@ -126,9 +126,8 @@ class lunarEnv(gym.Env):
             self.angle += 2
         elif dtheta == -1:
             self.angle -= 2
-
         if thrust == 1 and self.fuel > 0:
-            self.isThrusting = True
+            # print("Thrusting...")
             self.velX += self.thrust * math.sin(math.radians(self.angle))
             self.velY += self.thrust * math.cos(math.radians(self.angle))
             if abs(self.velX) < 0.001:
@@ -136,8 +135,8 @@ class lunarEnv(gym.Env):
             if abs(self.velY) < 0.001:
                 self.velY = 0
             self.fuel -= 1
-        else:
-            self.isThrusting = False
+        # else:
+            # print("Not thrusting...")
         self.velY += self.gravity
 
         self.x += self.velX
@@ -224,6 +223,11 @@ class lunarEnv(gym.Env):
             lander.add_attr(self.landertrans)
             self.viewer.add_geom(lander)
 
+            up = rendering.FilledPolygon([(1320,820),(1300,820),(1300, 800), (1320,800)])
+            self.up_c = rendering.Color([0,0,0,1])
+            up.add_attr(self.up_c)
+            self.viewer.add_geom(up)
+
             for ml in self.map:
                 line = rendering.Line(start=(ml.xo, ml.yo), end=(ml.x, ml.y))
                 self.linetrans = rendering.Transform()
@@ -231,8 +235,13 @@ class lunarEnv(gym.Env):
                 self.viewer.add_geom(line)
             self.newMap = False
 
+        if self.isThrusting:
+            self.up_c.enable()
+        else:
+            self.up_c.disable()
+
         self.landertrans.set_translation(self.x, self.y)
-        self.landertrans.set_rotation(self.angle)
+        self.landertrans.set_rotation(math.radians(self.angle))
 
         return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
