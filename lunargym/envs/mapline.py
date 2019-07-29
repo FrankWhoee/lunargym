@@ -13,7 +13,8 @@ class mapline():
             self.m = (y - yo) / (x - xo)
             self.b = y - (self.m * x)
 
-
+    def __str__(self):
+        return "((" + str(self.xo)+","+str(self.yo)+")," + "(" + str(self.xo)+","+str(self.yo)+"))"
 
     def getY(self, x):
         return self.m * x + self.b

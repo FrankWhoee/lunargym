@@ -17,20 +17,20 @@ class lunarEnv(gym.Env):
         self.action_space = discrete.Discrete(6)
         self.observation_space = space.Space(shape=(318,), dtype=np.float32)
         self.map = []
-
         self.done = False
-        self.reward = 0
         self.info = {}
 
         self.map_width = 1500
         self.map_height = 750
-        self.piece_width = 20;
+        self.piece_width = 20
+
+        self.isThrusting = False
 
         self.angle = 0
         self.fuel = 500
         self.velX = 0
         self.velY = 0
-        self.score = 0
+        self.reward = 0
 
         self.lander_w = 19
         self.lander_h = 18
@@ -40,9 +40,11 @@ class lunarEnv(gym.Env):
 
         # Constants
         self.thrust = 0.005
-        self.gravity = 0.00162
-
+        self.gravity = -0.00162
+        self.viewer = None
         self.generateNewMap()
+        if self.getPieceUnderLander().y > self.y or self.getPieceUnderLander().yo > self.y:
+            self.y = max(self.getPieceUnderLander().y, self.getPieceUnderLander().yo) + 50
 
     def get_observations(self):
         float_map = [ml.get_coordinates() for ml in self.map]
@@ -51,21 +53,24 @@ class lunarEnv(gym.Env):
             for float in line:
                 observations.append(float)
         observations.extend([self.map_width, self.map_height, self.piece_width, self.angle, self.fuel, self.velX,
-                             self.velY, self.score, self.lander_h, self.lander_w, self.x, self.y, self.thrust,
+                             self.velY, self.reward, self.lander_h, self.lander_w, self.x, self.y, self.thrust,
                              self.gravity])
         return observations
 
     def getPieceUnderLander(self):
-        return self.map.get(int(self.x / self.piece_width))
+        return self.map[int(self.x / self.piece_width)]
 
     def respawn(self):
         self.angle = 0
-        self.fuel = 500
         self.velX = 0
         self.velY = 0
+        self.x = self.map_width / 2
+        self.y = self.map_height / 2
+        if self.getPieceUnderLander().y > self.y or self.getPieceUnderLander().yo > self.y:
+            self.y = max(self.getPieceUnderLander().y, self.getPieceUnderLander().yo) + 50
 
     def landingArea(self):
-        originI = self.getPieceUnderLander()
+        originI = self.map.index(self.getPieceUnderLander())
         rightPieces = 0
         for i in range(originI + 1, len(self.map)):
             if not self.map[i].isFlat():
@@ -86,41 +91,53 @@ class lunarEnv(gym.Env):
 
             if abs(self.velX) < 0.1 and abs(self.velY) < 0.1 and self.getPieceUnderLander().isFlat():
                 addedScore = int(float(250) * bonus)
-                self.score += addedScore
+                self.reward += addedScore
+                self.respawn()
             elif abs(self.velX) < 0.2 and abs(self.velY) < 0.2 and self.getPieceUnderLander().isFlat():
                 addedScore = int(float(150) * bonus)
-                self.score += addedScore
+                self.reward += addedScore
+                self.respawn()
             elif abs(self.velX) < 0.3 and abs(self.velY) < 0.3 and self.getPieceUnderLander().isFlat():
                 addedScore = int(float(50) * bonus)
-                self.score += addedScore
+                self.reward += addedScore
+                self.respawn()
+            elif self.getPieceUnderLander().isFlat():
+                addedScore = int(float(5) * bonus)
+                self.reward += addedScore
+                self.respawn()
             else:
-                self.score -= 250
-            self.respawn()
+                self.reward -= 250
+                self.reset()
+            print(self.reward)
 
-        if self.fuel == 0:
-            self.done == True
+        if self.fuel <= 0 or self.y < 0 or self.y > self.map_height:
+            self.done = True
+            self.reset()
 
     def step(self, action_index):
         action = self.action_set[action_index]
         dtheta = action[0]
         thrust = action[1]
         self.check()
-        self.reward == self.score
+
         if self.done:
-            return [self.map, self.reward, self.done]
+            return [self.get_observations(), self.reward, self.done, self.info]
         if dtheta == 1:
             self.angle += 2
         elif dtheta == -1:
             self.angle -= 2
 
         if thrust == 1 and self.fuel > 0:
+            self.isThrusting = True
             self.velX += self.thrust * math.sin(math.radians(self.angle))
             self.velY += self.thrust * math.cos(math.radians(self.angle))
             if abs(self.velX) < 0.001:
                 self.velX = 0
             if abs(self.velY) < 0.001:
                 self.velY = 0
-            self.fuel -= 0.1
+            self.fuel -= 1
+        else:
+            self.isThrusting = False
         self.velY += self.gravity
 
         self.x += self.velX
@@ -155,7 +172,7 @@ class lunarEnv(gym.Env):
                     try:
                         x_inter = (mapline.b - border.b) / (border.m - mapline.m)
                     except:
-                        x_inter = math.inf
+                        x_inter = float('inf')
                     y_inter = border.m * x_inter + border.b
 
                 interLander = max(border.x, border.xo) >= x_inter >= min(border.x,
@@ -165,47 +182,74 @@ class lunarEnv(gym.Env):
                                                                             mapline.xo) and max(
                     mapline.y, mapline.yo) >= y_inter >= min(mapline.y, mapline.yo)
 
-                return interLander and interTerrain
+                if interLander and interTerrain:
+                    return True
         return False
 
     def reset(self):
         self.map = []
 
-        self.map_width = 1500
-        self.map_height = 750
-        self.piece_width = 20;
+        self.done = False
+        self.reward = 0
+        self.info = {}
 
         self.angle = 0
         self.fuel = 500
         self.velX = 0
         self.velY = 0
-        self.score = 0
-
-        self.lander_w = 19
-        self.lander_h = 18
+        self.reward = 0
 
         self.x = self.map_width / 2
         self.y = self.map_height / 2
-
-        # Constants
-        self.thrust = 0.005 + random.uniform(-0.001, 0.001)
-        self.gravity = 0.00162 + random.uniform(-0.001, 0.001)
+        if self.viewer is not None:
+            self.viewer.close()
+        else:
+            self.viewer = None
         self.generateNewMap()
+        self.viewer = None
+        if self.getPieceUnderLander().y > self.y or self.getPieceUnderLander().yo > self.y:
+            self.y = max(self.getPieceUnderLander().y, self.getPieceUnderLander().yo) + 50
         return self.get_observations()
 
     def render(self, mode='human'):
-        pass
+        screen_width = self.map_width
+        screen_height = self.map_height
+        from gym.envs.classic_control import rendering
+
+        if self.viewer is None:
+            self.viewer = rendering.Viewer(screen_width, screen_height)
+            l, r, t, b = -self.lander_w / 2, self.lander_w / 2, self.lander_h / 2, -self.lander_h / 2
+            lander = rendering.Image(fname="lander.png", width=self.lander_w, height=self.lander_h)
+            self.landertrans = rendering.Transform()
+            lander.add_attr(self.landertrans)
+            self.viewer.add_geom(lander)
+
+            for ml in self.map:
+                line = rendering.Line(start=(ml.xo, ml.yo), end=(ml.x, ml.y))
+                self.linetrans = rendering.Transform()
+                line.add_attr(self.linetrans)
+                self.viewer.add_geom(line)
+            self.newMap = False
+
+        self.landertrans.set_translation(self.x, self.y)
+        self.landertrans.set_rotation(self.angle)
+
+        return self.viewer.render(return_rgb_array=mode == 'rgb_array')
 
     def close(self):
-        pass
+        if self.viewer is not None:
+            self.viewer.close()
+            self.viewer = None
 
     def generateNewMap(self):
         for i in range(0, self.map_width + 1, self.piece_width):
             xo = i
             x = i + self.piece_width
-            yo = self.map_height if len(self.map) == 0 else self.map[((i / self.piece_width) - 1)].y
-            y = min((yo + random.uniform(0, 100) - 55), self.map_height)
-            if random.randint(0, 100) > 0.75:
+            yo = 0 if len(self.map) == 0 else self.map[((i / self.piece_width) - 1)].y
+            y = max((yo + random.uniform(-40, 60)), 0)
+            if random.randint(0, 100) > 50:
                 y = yo
             newline = mapline(xo, x, yo, y)
             self.map.append(newline)
+
+
